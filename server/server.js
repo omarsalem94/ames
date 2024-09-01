@@ -13,8 +13,8 @@ const authRoutes = require("./routes/auth");
 const moduleRoutes = require("./routes/moduleRoutes");
 const programRoutes = require("./routes/programRoutes");
 
-const Module = require("./models/Module"); // Ensure this line is present
-const Program = require("./models/Program"); // Ensure this line is present
+const Module = require("./models/Module"); 
+const Program = require("./models/Program"); 
 
 dotenv.config();
 
@@ -36,6 +36,14 @@ app.use((req, res, next) => {
   next();
 });
 
+// Serve static files from the React app
+app.use(express.static(path.join(__dirname, '../client/build')));
+
+// Handle React routing, return all requests to React app
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../client/build', 'index.html'));
+});
+
 // Email configuration
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -45,6 +53,7 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+// Email endpoint
 app.post("/api/send-reminder", async (req, res) => {
   const { email, subject, text } = req.body;
 
@@ -56,11 +65,7 @@ app.post("/api/send-reminder", async (req, res) => {
   };
 
   try {
-    await transporter.sendMail(mailOptions, (error, info) => {
-      if (error) {
-        return console.log(error);
-      }
-    });
+    await transporter.sendMail(mailOptions);
     res.status(200).send("Email sent successfully");
   } catch (error) {
     console.error("Error sending email:", error);
@@ -68,6 +73,7 @@ app.post("/api/send-reminder", async (req, res) => {
   }
 });
 
+// Fetch not started reviews
 app.get("/api/reviews/not-started", async (req, res) => {
   try {
     const modules = await Module.find({ status: "Not Started" });
@@ -80,7 +86,7 @@ app.get("/api/reviews/not-started", async (req, res) => {
   }
 });
 
-// File upload configuration
+// File upload and export configuration
 const upload = multer({ dest: "uploads/" });
 
 const exportToExcel = async () => {
@@ -155,7 +161,7 @@ app.post(
           author: "",
           date: null,
           status: "Not Started",
-          email: module["email"] || "", // Add this line
+          email: module["email"] || "",
         });
       }
 
@@ -175,7 +181,7 @@ app.post(
           author: "",
           date: null,
           status: "Not Started",
-          email: program["email"] || "", // Add this line
+          email: program["email"] || "",
         });
       }
 
@@ -190,7 +196,6 @@ app.post(
   }
 );
 
-// Endpoint to download exported file
 app.get("/api/download/:filename", (req, res) => {
   const filePath = path.join(__dirname, "exports", req.params.filename);
   res.download(filePath, (err) => {
@@ -201,7 +206,6 @@ app.get("/api/download/:filename", (req, res) => {
   });
 });
 
-// Endpoint to export the current academic year
 app.get("/api/export/current", async (req, res) => {
   try {
     const filePath = await exportToExcel();
@@ -216,7 +220,6 @@ app.get("/api/export/current", async (req, res) => {
   }
 });
 
-// Function to generate Word document for reviews
 const generateWordDocument = async (type, id) => {
   let data;
   if (type === "module") {
@@ -320,9 +323,23 @@ const generateWordDocument = async (type, id) => {
       new Paragraph({
         children: [
           new TextRun({
-            text: `Proposed Future Changes: ${
-              data.proposedFutureChanges || ""
-            }`,
+            text: `Proposed Future Changes: ${data.proposedFutureChanges || ""}`,
+            size: 24,
+          }),
+        ],
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: `Quality and Improvement Plans: ${data.qualityAndImprovementPlans || ""}`,
+            size: 24,
+          }),
+        ],
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: `Other Comments: ${data.otherComments || ""}`,
             size: 24,
           }),
         ],
@@ -334,6 +351,30 @@ const generateWordDocument = async (type, id) => {
         children: [
           new TextRun({
             text: `Program Leader: ${data.programLeader || ""}`,
+            size: 24,
+          }),
+        ],
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: `Program Team: ${data.programTeam || ""}`,
+            size: 24,
+          }),
+        ],
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: `Changes From Last Year: ${data.changesFromLastYear || ""}`,
+            size: 24,
+          }),
+        ],
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: `Student Feedback: ${data.studentFeedback || ""}`,
             size: 24,
           }),
         ],
@@ -353,17 +394,20 @@ const generateWordDocument = async (type, id) => {
             size: 24,
           }),
         ],
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: `Other Comments: ${data.otherComments || ""}`,
+            size: 24,
+          }),
+        ],
       })
     );
   }
 
   const doc = new Document({
-    sections: [
-      {
-        properties: {},
-        children: paragraphs,
-      },
-    ],
+    sections: [{ properties: {}, children: paragraphs }],
   });
 
   const buffer = await Packer.toBuffer(doc);
